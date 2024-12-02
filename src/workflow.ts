@@ -64,7 +64,7 @@ class InMemoryWorkflow extends BaseWorkflow {
             const stepResult = await step.run(this.context);
             if (stepResult.isErr) {
                 await this.rollback();
-                return stepResult;
+                return {...stepResult, stepName: step.name};
             }
             this.currentStepIndex++;
         }
