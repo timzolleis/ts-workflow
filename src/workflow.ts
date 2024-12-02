@@ -1,7 +1,7 @@
-import {WorkflowStep} from "./step";
-import {WorkflowContext} from "./context";
-import {errorResult, successResult} from "./result";
-import {StorageStrategy} from "./storage-strategy";
+import { StorageStrategy } from "./storage-strategy";
+import { WorkflowStep } from "./step";
+import { WorkflowContext } from "./context";
+import { ErrorResult, successResult } from "./result";
 
 type WorkflowStatus = "pending" | "running" | "completed" | "failed";
 
@@ -10,41 +10,41 @@ class BaseWorkflow<IDType> {
     protected readonly context: WorkflowContext;
     protected readonly steps: WorkflowStep<unknown, unknown>[];
     private readonly storageStrategy?: StorageStrategy<IDType>;
-
     private currentStepIndex = 0;
-    private id?: IDType;
 
     constructor(options: DefineWorkflowOptions<IDType>) {
         this.name = options.name;
         this.steps = options.steps;
         this.context = options.setupContext ? options.setupContext(new WorkflowContext()) : new WorkflowContext();
         this.storageStrategy = options.storageStrategy;
-
     }
 
     public async run() {
-        if (this.storageStrategy) {
-            this.id = await this.storageStrategy.storeWorkflow(this.name);
-        }
+        const workflowId = await this.storeWorkflow(this.name);
         for (const step of this.steps) {
-            const stepId = await this.storeStep(step.name);
-            const result = await step.run(this.context);
-            if (result && result.isErr) {
-                await this.updateStepStatus({stepId, status: "failed"});
-                await this.rollback();
-                return errorResult({
-                    failedStep: step.name,
-                    error: result.error,
-                    id: this.id
-                });
+            const stepId = workflowId ? await this.storeStep(step.name, workflowId) : undefined;
+            const stepResult = await step.run(this.context);
+            if (stepResult.isErr) {
+                return await this.handleFailure({ result: stepResult, stepId, workflowId, stepName: step.name });
             }
-            await this.updateStepStatus({stepId, status: "completed"});
+            if (workflowId && stepId) {
+                await this.updateStepStatus({ stepId, status: "running", workflowId });
+            }
             this.currentStepIndex++;
         }
-        if (this.storageStrategy && this.id) {
-            await this.storageStrategy.updateWorkflowStatus({workflowId: this.id, status: "completed"});
+        if (workflowId) {
+            await this.updateWorkflowStatus({ workflowId, status: "completed" });
         }
-        return successResult({id: this.id});
+        return successResult({ id: workflowId });
+    }
+
+    private async handleFailure({ result, stepId, workflowId, stepName }: { result: ErrorResult<unknown>, stepId?: IDType, workflowId?: IDType, stepName: string }) {
+        if (workflowId && stepId) {
+            await this.updateStepStatus({ stepId, status: "failed", workflowId });
+            await this.updateWorkflowStatus({ workflowId, status: "failed" });
+        }
+        await this.rollback();
+        return {...result, stepName};
     }
 
     private async rollback() {
@@ -56,26 +56,30 @@ class BaseWorkflow<IDType> {
         }
     }
 
-    private async updateStepStatus(params: { stepId: IDType | undefined; status: WorkflowStatus }) {
-        if (!this.id || !this.storageStrategy || !params.stepId) {
-            return;
+    private async updateStepStatus({ stepId, status, workflowId }: { stepId: IDType, status: WorkflowStatus, workflowId: IDType }) {
+        if (this.storageStrategy) {
+            await this.storageStrategy.updateStepStatus({ stepId, status, workflowId });
         }
-        await this.storageStrategy.updateStepStatus({
-            stepId: params.stepId,
-            status: params.status,
-            workflowId: this.id
-        });
     }
 
-
-    private async storeStep(name: string) {
-        if (!this.id || !this.storageStrategy) {
-            return undefined;
+    private async updateWorkflowStatus({ workflowId, status }: { workflowId: IDType, status: WorkflowStatus }) {
+        if (this.storageStrategy) {
+            await this.storageStrategy.updateWorkflowStatus({ workflowId, status });
         }
-        return await this.storageStrategy.storeStep({
-            workflowId: this.id,
-            stepName: name
-        });
+    }
+
+    private async storeStep(name: string, workflowId: IDType) {
+        if (this.storageStrategy) {
+            return this.storageStrategy.storeStep({ workflowId, stepName: name });
+        }
+        return undefined;
+    }
+
+    private async storeWorkflow(name: string) {
+        if (this.storageStrategy) {
+            return this.storageStrategy.storeWorkflow(name);
+        }
+        return undefined;
     }
 }
 
@@ -90,4 +94,4 @@ function defineWorkflow<IDType>(options: DefineWorkflowOptions<IDType>) {
     return new BaseWorkflow(options);
 }
 
-export {defineWorkflow, WorkflowStatus};
+export { defineWorkflow, WorkflowStatus };

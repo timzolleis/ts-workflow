@@ -12,7 +12,10 @@ describe('BaseWorkflow', () => {
         steps = [
             defineStep({
                 name: 'step1',
-                run: async (): Promise<Result<string, unknown>> => successResult('step1 success')
+                run: async (): Promise<Result<string, unknown>> => successResult('step1 success'),
+                rollback: vi.fn(async () => {
+
+                })
             }),
             defineStep({
                 name: 'step2',
@@ -72,11 +75,8 @@ describe('BaseWorkflow', () => {
         });
         const result = await workflow.run();
         if (result.isErr) {
-            expect(result.error).toEqual({
-                failedStep: 'failingStep',
-                error: 'step failed',
-                id: 'workflowId'
-            });
+            expect(result.error).toBe('step failed');
+            expect(result.stepName).toBe('failingStep');
             expect(steps[0].rollback).toHaveBeenCalled();
             expect(steps[1].rollback).toHaveBeenCalled();
         } else {
@@ -98,9 +98,9 @@ describe('BaseWorkflow', () => {
         });
         const result = await workflow.run();
         if (result.isErr) {
-            expect(result.error.error).toBeInstanceOf(Error);
-            expect((result.error.error as Error).message).toBe('step failed');
-            expect(result.error.failedStep).toBe('failingStep');
+            expect(result.error).toBeInstanceOf(Error);
+            expect((result.error as Error).message).toBe('step failed');
+            expect(result.stepName).toBe('failingStep');
         } else {
             throw new Error('Unexpected success');
         }
