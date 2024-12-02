@@ -16,9 +16,14 @@ Define your workflow steps using the `defineStep` helper function.
 ```typescript
 import {defineStep} from 'ts-workflow';
 
-const myStep = defineStep('myStep', async (input: string) => {
-    console.log(input);
-    return input
+const myStep = defineStep({
+    name: 'myStep',
+    run: async (ctx) => {
+        console.log('Hello, World!');
+    },
+    rollback: async (ctx) => {
+        console.log('Rolling back step');
+    }
 });
 ```
 ### Defining a workflow
