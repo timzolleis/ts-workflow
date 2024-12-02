@@ -1,4 +1,3 @@
-import {WorkflowContext} from "./context";
 import {WorkflowStatus} from "./workflow";
 
 
