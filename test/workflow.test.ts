@@ -62,6 +62,8 @@ describe('BaseWorkflow', () => {
         const failingStep = defineStep({
             name: 'failingStep',
             run: async () => errorResult('step failed'),
+            rollback: vi.fn(async () => {
+            })
         });
         const workflow = defineWorkflow({
             name: 'testWorkflow',
@@ -75,6 +77,7 @@ describe('BaseWorkflow', () => {
                 error: 'step failed',
                 id: 'workflowId'
             });
+            expect(steps[0].rollback).toHaveBeenCalled();
             expect(steps[1].rollback).toHaveBeenCalled();
         } else {
             throw new Error('Unexpected success');
