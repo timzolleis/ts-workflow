@@ -1,11 +1,13 @@
 import {WorkflowContext} from "./context";
-import {errorResult, Result} from "./result";
+import {errorResult, Result, successResult} from "./result";
+
+
 
 
 interface WorkflowStep<T, E> {
     name: string;
 
-    run(context: WorkflowContext): Promise<Result<T, E>>;
+    run(context: WorkflowContext): Promise<Result<T, E>>
 
     rollback?(context: WorkflowContext): Promise<void>;
 }
@@ -13,12 +15,12 @@ interface WorkflowStep<T, E> {
 interface DefineStepOptions<T, E> {
     name: string;
     rollback?: WorkflowStep<T, E>['rollback'];
-    run: WorkflowStep<T, E>['run'];
+    run: () => Promise<Result<T, E>> | Promise<void>
 }
 
 class BaseWorkflowStep<T, E> implements WorkflowStep<T, E> {
     public readonly name: string;
-    readonly #run: WorkflowStep<T, E>['run'];
+    readonly #run: (context: WorkflowContext) => Promise<Result<T, E>> | Promise<void>;
     public readonly rollback?: WorkflowStep<T, E>['rollback'];
 
     constructor(options: DefineStepOptions<T, E>) {
@@ -30,13 +32,20 @@ class BaseWorkflowStep<T, E> implements WorkflowStep<T, E> {
     /**
      * Wrap the original run method in a try/catch block to prevent the workflow from crashing
      */
-    public async run(context: WorkflowContext): Promise<Result<T, E>> {
+    public async run(context: WorkflowContext): Promise<Result<T, E>>  {
         try {
             const result = await this.#run(context);
-            return result as Result<T, E>;
+            if (!result) {
+                return successResult({} as T);
+            }
+            return this.isResult(result) ? result : successResult(result)
         } catch (error) {
             return errorResult(error) as Result<T, E>;
         }
+    }
+
+    private isResult(value: unknown): value is Result<T, E> {
+        return !!value?.hasOwnProperty('isOk') && value.hasOwnProperty('isErr');
     }
 }
 

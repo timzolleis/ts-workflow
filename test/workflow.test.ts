@@ -3,6 +3,7 @@ import {defineStep, WorkflowStep} from "../src/step";
 import {StorageStrategy} from "../src/storage-strategy";
 import {errorResult, Result, successResult} from "../src/result";
 import {defineWorkflow} from "../src/workflow";
+import {createContext} from "../src/context";
 
 describe('BaseWorkflow', () => {
     let steps: WorkflowStep<unknown, unknown>[];
@@ -14,8 +15,8 @@ describe('BaseWorkflow', () => {
                 name: 'step1',
                 run: async (): Promise<Result<string, unknown>> => successResult('step1 success'),
                 rollback: vi.fn(async () => {
-
                 })
+
             }),
             defineStep({
                 name: 'step2',
@@ -38,9 +39,12 @@ describe('BaseWorkflow', () => {
         const workflow = defineWorkflow({
             name: 'testWorkflow',
             steps,
-            storageStrategy
+            storageStrategy,
+            setupContext: ({name}: { name: string }, context) => {
+                context.set(createContext<string>(), name);
+            }
         });
-        const result = await workflow.run();
+        const result = await workflow.run({name: "test"});
         if (result.isOk) {
             expect(result.data.id).toBe('workflowId');
         } else {
